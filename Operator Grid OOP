@@ -1,0 +1,527 @@
+#include <iostream>
+using namespace std;
+class Operator{
+	int center_x;
+	int center_y;
+	int op_size;
+	
+	public:
+		Operator(int x,int y,int size);
+		
+		void reset (int new_x ,int new_y ,int new_size){
+			center_x = new_x;
+			center_y = new_y;
+			op_size = new_size;
+		};
+		
+		void set_x(int new_x){	center_x = new_x;};
+		int get_x(){return center_x;};
+
+		void set_y(int new_y){	center_y = new_y;};
+		int get_y(){	return center_y;};		
+
+		void set_size(int new_size){	op_size = new_size;};
+		int get_size(){	return op_size;};		
+};
+
+Operator::Operator(int x,int y,int size){
+	center_x = x-1;
+	center_y = y-1;
+	op_size = size;
+}
+
+class ArithmeticOperator: public Operator {
+	char sign;
+	
+	public:
+		ArithmeticOperator(int x,int y,int size , char sign) : Operator(x,y,size){
+			if(sign == '+'|| sign == '-' || sign == 'x' || sign == '/'){
+				this->sign = sign;		
+			}
+			else	cout << "SIGN parameter is invalid!" ;
+		};
+		
+		char get_sign(){
+			return sign;
+		};
+		
+		//Prints out operator's center location, size, and sign character
+		void print_operator(){
+		cout <<	"ARITHMETIC_OPERATOR[" << sign << "], CENTER_LOCATION[" << get_x() + 1 << "," << get_y() + 1 << "], SIZE[" << get_size() << "]" << endl;
+		};
+};
+#define MAX_OPERATOR_SIZE 18
+
+class OperatorGrid {
+	int grid_rows;
+	int grid_cols;
+	char **grid;
+	
+	int num_operators;
+	ArithmeticOperator *operators[MAX_OPERATOR_SIZE];
+	
+	public:
+		OperatorGrid(int rows,int cols);	//Constructer
+		~OperatorGrid();					//Destructor
+
+		bool place_operator (ArithmeticOperator *);			//To Place operators
+		bool move_operator ( int x, int y, char direction, int move_by);	//Moving
+		void print_operators();								//Print Arithmetic Operator class's print function 
+						 									//Some additional methods 
+		bool Conflict_Error(int,int ,int ,char );			//Check Conflict Error
+		bool Border_Error(int, int , int ,char );			//Check Border Error
+		int  find_center(int , int);						//FIND CENTER
+		void delete_op(int ,int ,int ,char);				//Delete from grid to check conflict error correctly  
+		void place_oper(ArithmeticOperator *);				//Place operator function
+};
+
+OperatorGrid::OperatorGrid(int rows,int cols){		//Constructer
+			grid_rows = rows;						//
+			grid_cols = cols;
+			num_operators=0;
+			grid = new char*[grid_rows];			//Create grid[grid_rows][grid_cols]
+			for(int i = 0; i < grid_rows; ++i){
+   				grid[i] = new char[grid_cols];					
+			}
+			for(int i=0;i<grid_rows;i++){			//Put a symbol to grid 
+				for(int j=0;j<grid_cols;j++){
+					grid[i][j] = 'a';				
+				}				
+			}
+};
+
+
+OperatorGrid::~OperatorGrid(){					//Destructor
+	for (int i = 0; i < grid_rows; i++){		//Delete 
+  		delete [] grid[i];						//.
+   	}											//.
+	delete[]grid;								//Grid
+	for(int i=0;i<num_operators;i++)	delete [] operators[i];		//Delete operators pointer
+
+	cout << "DESTRUCTOR: GIVE BACK[" << grid_rows <<"," << grid_cols << "] chars." <<endl;
+	cout << "DESTRUCTOR: GIVE BACK[" << num_operators << "] Operators." << endl;
+}
+
+bool OperatorGrid::place_operator(ArithmeticOperator * operator_x){		//***PLACE OPERATOR***
+		char symbol = operator_x->get_sign();							//This part for getting variables of operator_x
+		int oper_size = operator_x->get_size();
+		int cent_x = operator_x->get_x();
+		int cent_y = operator_x->get_y();
+
+		bool border_flag=Border_Error(cent_x,cent_y,oper_size,symbol);
+		bool conf_flag = Conflict_Error(cent_x,cent_y,oper_size,symbol);
+		
+		if(!border_flag)
+			cout << "BORDER ERROR: Operator " << symbol << " with size " << oper_size << " can not be placed on (" << cent_x+1 << "," << cent_y+1 << ")."<< endl;
+		if(!conf_flag)
+			cout << "Conflict ERROR: Operator " << symbol << " with size " << oper_size << " can not be placed on (" << cent_x+1 << "," << cent_y+1 << ")."<< endl;
+		if(!conf_flag or !border_flag)
+			return false;	
+
+																//if there is no error
+			place_oper(operator_x);										//Function for placing operator 
+			cout << "SUCCESS: Operator " << symbol << " with size " << oper_size <<" is placed on (" << cent_x+1 << "," << cent_y+1 <<").\n";
+			operators[num_operators]=operator_x;						//Successfully placed and add operator_x to operators 
+			num_operators++;											//Num Operators start from 0 and it is increased for all success placing	
+			return true; 
+		
+};
+bool OperatorGrid::move_operator ( int x, int y, char direction, int move_by){	//***MOVE OPERATOR***
+	x--;		//Decrease x 
+	y--;		//Decrease y
+	bool flag=NULL;  //Flag is NULL for now
+	int seq; 		 //This variable to use in operators array 		
+    if(find_center(x,y)>-1){	//If center is found
+    	seq = find_center(x,y);
+	}        
+	else{			//If center is not found that means there is no operator in x.th row and y.th column
+		return false;
+	}
+	bool border_flag;
+	bool conf_flag;
+	int cent_x = operators[seq]->get_x();		//**
+	int cent_y = operators[seq]->get_y();		//To get variables of operators's (seq).th which is found in find center function
+	char symbol = operators[seq]->get_sign();	//
+	int oper_size = operators[seq]->get_size(); //**
+
+	delete_op(cent_x,cent_y,oper_size,symbol);	//Delete from grid to check conflict error correctly 
+												//Case: preventing conflict error with ownself		
+	switch(direction){							//To control which direction will be moved 
+		case 'R':								//if right
+				border_flag = !Border_Error(cent_x,cent_y+move_by,oper_size,symbol);
+				conf_flag = !Conflict_Error(cent_x,cent_y+move_by,oper_size,symbol);
+				if(border_flag)	//Check Border error
+					cout << "BORDER ERROR: Operator " << symbol << " can not be moved from (" << cent_x+1 << "," << cent_y+1 << ") to (" << cent_x+1 << "," << cent_y + 1 +move_by << ")." << endl; 
+				if(conf_flag)	//Check Conflict Error
+					cout << "CONFLICT ERROR: Operator " << symbol << " can not be moved from (" << cent_x+1 << "," << cent_y+1 <<") to (" << cent_x+1 << "," << cent_y + 1 + move_by << ")."<< endl;			
+				if(border_flag or conf_flag){
+					place_oper(operators[seq]);
+					return false;
+				}
+			
+				//İf there is no error
+				operators[seq]->reset(cent_x,cent_y + move_by,oper_size);
+				place_oper(operators[seq]);
+				cout << "SUCCESS: " << symbol << " moved from (" << cent_x+1 <<"," << cent_y+1 << ") to ("<< cent_x+1 <<","<< cent_y+1 + move_by <<")."<<endl;	
+				flag = true;
+					
+		break;
+		case 'L':			//if left
+			border_flag = !Border_Error(cent_x,cent_y-move_by,oper_size,symbol);
+			conf_flag = !Conflict_Error(cent_x,cent_y-move_by,oper_size,symbol);
+				if(border_flag)	//Check Border error
+					cout << "BORDER ERROR: Operator " << symbol << " can not be moved from (" << cent_x+1 << "," << cent_y+1 << ") to (" << cent_x+1 << "," << cent_y + 1 +move_by << ")." << endl; 
+				if(conf_flag)	//Check Conflict Error
+					cout << "CONFLICT ERROR: Operator " << symbol << " can not be moved from (" << cent_x+1 << "," << cent_y+1 <<") to (" << cent_x+1 << "," << cent_y + 1 + move_by << ")."<< endl;			
+				if(border_flag or conf_flag){
+					place_oper(operators[seq]);
+					return false;
+				}
+				operators[seq]->reset(cent_x,cent_y - move_by,oper_size);
+				place_oper(operators[seq]);
+				cout << "SUCCESS: " << symbol << " moved from (" << cent_x + 1 <<"," << cent_y+1 << ") to ("<< cent_x+1 <<","<< cent_y-move_by+1 <<")."<<endl;				
+				flag = true;
+			
+		break;
+		case 'U':			//if up
+			border_flag = !Border_Error(cent_x-move_by,cent_y,oper_size,symbol);
+			conf_flag = !Conflict_Error(cent_x-move_by,cent_y,oper_size,symbol);
+				if(border_flag)	//Check Border error
+					cout << "BORDER ERROR: Operator " << symbol << " can not be moved from (" << cent_x+1 << "," << cent_y+1 << ") to (" << cent_x+1 << "," << cent_y + 1 +move_by << ")." << endl; 
+				if(conf_flag)	//Check Conflict Error
+					cout << "CONFLICT ERROR: Operator " << symbol << " can not be moved from (" << cent_x+1 << "," << cent_y+1 <<") to (" << cent_x+1 << "," << cent_y + 1 + move_by << ")."<< endl;			
+				if(border_flag or conf_flag){
+					place_oper(operators[seq]);
+					return false;
+				}
+		
+				operators[seq]->reset(cent_x - move_by ,cent_y,oper_size);
+				place_oper(operators[seq]);
+				cout << "SUCCESS: " << symbol << " moved from (" << cent_x+1 <<"," << cent_y+1 << ") to ("<< cent_x - move_by+1 <<","<< cent_y+1 <<")."<<endl;
+				flag = true;
+		break;
+		case 'D':			//if down
+			border_flag = !Border_Error(cent_x + move_by,cent_y,oper_size,symbol);
+			conf_flag = !Conflict_Error(cent_x + move_by,cent_y,oper_size,symbol);
+				if(border_flag)	//Check Border error
+					cout << "BORDER ERROR: Operator " << symbol << " can not be moved from (" << cent_x+1 << "," << cent_y+1 << ") to (" << cent_x+1 << "," << cent_y + 1 +move_by << ")." << endl; 
+				if(conf_flag)	//Check Conflict Error
+					cout << "CONFLICT ERROR: Operator " << symbol << " can not be moved from (" << cent_x+1 << "," << cent_y+1 <<") to (" << cent_x+1 << "," << cent_y + 1 + move_by << ")."<< endl;			
+				if(border_flag or conf_flag){
+					place_oper(operators[seq]);
+					return false;
+				}
+			
+				operators[seq]->reset(cent_x + move_by,cent_y,oper_size);
+				place_oper(operators[seq]);
+				cout << "SUCCESS: " << symbol << " moved from (" << cent_x+1 <<"," << cent_y+1 << ") to ("<< cent_x + move_by+1 <<","<< cent_y+1 <<")."<<endl;				
+				flag = true;	
+		break;	
+	}
+	return flag;			//if success return flag	
+}
+
+
+
+void OperatorGrid::print_operators(){		//Print operator
+	for(int i=0;i<num_operators;i++){
+		operators[i]->print_operator();
+	}
+}
+
+bool OperatorGrid::Conflict_Error(int x, int y, int size,char symbol){		//Conflict Error check
+	int k=0;
+	bool flag=true;
+	
+	switch(symbol){
+		case '+':
+				for(k=1;k<size+1;k++){
+					if(x+k>grid_rows||x-k<0||y+k>grid_cols||y-k<0)//To check is there border error
+						break;									//If there is border error break for
+					if(	grid[x][y+k]=='a'&& 			//all of these must be equal to given input to grid 
+						grid[x+k][y]=='a'&&				//So it must be equal to 'a'
+						grid[x-k][y]=='a'&&				//
+						grid[x][y]  =='a'&&				//	
+						grid[x][y-k]=='a');				//
+					else{								//Else flag=false and break for last row it will be returned
+						flag=false;	
+						break;
+					}					
+				}
+				break;
+		case '-':
+				for(k=1;k<size+1;k++){
+					if(y+k>grid_cols||y-k<0)	
+						break;		
+					if(	grid[x][y+k]=='a'&& //all of these must be equal to given input to grid
+						grid[x][y-k]=='a'&&//So it must be equal to 'a'
+						grid[x][y]  =='a');//Else flag=false and break for last row it will be returned
+					else{
+						flag=false;
+						break;
+					}						
+				}
+			break;
+		case 'x':
+				for(k=1;k<size+1;k++){
+					if(x+k>grid_rows||x-k<0||y+k>grid_cols||y-k<0)
+						break;
+					if(	grid[x-k][y-k]=='a'&&
+						grid[x+k][y-k]=='a'&&
+						grid[x-k][y+k]=='a'&&	//Same way to detect Conflict
+						grid[x+k][y+k]=='a'&&
+						grid[x][y]    =='a');
+						else{
+							flag=false;
+							break;
+						}					
+				}
+			break;
+		case '/':
+
+			for(k=1;k<size+1;k++){
+				if(x+k>grid_rows||x-k<0||y+k>grid_cols||y-k<0)	//To check is there border error 
+					break;
+				if(	grid[x-k][y+k]=='a'&& 
+					grid[x+k][y-k]=='a'&&	//Same way to detect Conflict
+					grid[x][y]    =='a');
+				else{
+					flag=false;
+					break;
+				}
+			}
+
+		break;
+	}
+	return flag;
+}
+
+bool OperatorGrid::Border_Error(int x, int y, int size ,char symbol){
+	bool flag=NULL;
+	switch(symbol){
+		case '+':
+			if(x+size>grid_rows||x-size<0||y+size>grid_cols||y-size<0){	//simply right,left,up,down check is there border error
+				flag = false;
+				return flag;
+			}
+			else	flag = true;
+		break;
+		
+		case '-':
+			if(y+size>grid_cols||y-size<0){
+				flag = false;
+				return flag;
+			}
+			else	flag = true;
+		break;
+		case 'x':
+			if(x+size>grid_rows||x-size<0||y+size>grid_cols||y-size<0){
+				flag = false;			
+				return flag;
+			}
+			else flag = true;
+		break;
+		case '/':
+			if(x+size>grid_rows||x-size<0||y+size>grid_cols||y-size<0){
+				flag = false;
+				return flag;				
+			}
+			else	flag = true;
+		break;
+	}
+	return flag;	
+}
+int OperatorGrid::find_center(int x,int y){
+		int i=0;
+		char symbol_xy = grid[x][y];
+		if(symbol_xy=='+'){
+				for(i=0;i<num_operators;i++){					//num_operators times run
+					if(operators[i]->get_sign()=='+'){			//if operators and x,y coordinates are equal symbol
+						int op_x = operators[i]->get_x();
+						int op_y = operators[i]->get_y();
+						int op_size = operators[i]->get_size();				
+							if(op_x == x && op_y==y)	return i;
+							for(int k=1;k<op_size+1;k++){
+								if(op_x + k == x && op_y == y)	return i;
+								if(op_x -k  == x && op_y == y)	return i;
+								if(op_x == x && op_y + k == y)	return i;
+								if(op_x == x && op_y-k == y)	return i;
+							}		
+					}
+				}	
+		}		
+		else if(symbol_xy=='-'){
+				for(i=0;i<num_operators;i++){			//num_operators times run
+					if(operators[i]->get_sign()=='-'){	//if operators and x,y coordinates are equal symbol
+						int op_x = operators[i]->get_x();
+						int op_y = operators[i]->get_y();
+						int op_size = operators[i]->get_size();				
+							if(op_x == x && op_y==y)	return i;
+							for(int k=1;k<op_size+1;k++){
+								if(op_x == x && op_y - k == y)	return i;	//if operators's x and y equal to given x and y
+								if(op_x == x && op_y + k == y)	return i;	//return i which means which operators's x and y 
+							}		
+					}
+				}			
+		}
+		else if(symbol_xy == 'x'){
+				for(i=0;i<num_operators;i++){
+					if(operators[i]->get_sign()=='x'){
+						int op_x = operators[i]->get_x();
+						int op_y = operators[i]->get_y();
+						int op_size = operators[i]->get_size();				
+							if(op_x == x && op_y==y)	return i;
+							for(int k=1;k<op_size+1;k++){	
+								if(op_x + k == x && op_y + k == y)	return i;
+								if(op_x -k  == x && op_y - k == y)	return i;
+								if(op_x + k == x && op_y - k == y)	return i;
+								if(op_x - k == x && op_y + k == y)	return i;
+							}		
+					}
+				}			
+		}
+		else if(symbol_xy == '/'){
+				for(i=0;i<num_operators;i++){
+					if(operators[i]->get_sign()=='/'){
+						int op_x = operators[i]->get_x();
+						int op_y = operators[i]->get_y();
+						int op_size = operators[i]->get_size();				
+							if(op_x == x && op_y==y)	return i;
+							for(int k=1;k<op_size+1;k++){
+								if(op_x + k == x && op_y - k == y)	return i;
+								if(op_x - k == x && op_y + k == y)	return i;
+							}		
+					}
+				}			
+		}
+		else{
+			i=-1;
+			return i; 
+		}
+		return i;
+}
+
+void OperatorGrid::delete_op(int cent_x,int cent_y,int oper_size,char symbol){
+	switch(symbol){
+			case '+':
+						grid[cent_x][cent_y]='a';
+				for(int k=1;k<oper_size+1;k++){
+						grid[cent_x][cent_y+k]='a';
+						grid[cent_x+k][cent_y]='a';
+						grid[cent_x-k][cent_y]='a';
+						grid[cent_x][cent_y-k]='a';
+					}
+			break;
+				
+			case '-':
+					grid[cent_x][cent_y]='a';
+				for(int k=1;k<oper_size+1;k++){
+					grid[cent_x][cent_y-k]='a';
+					grid[cent_x][cent_y+k]='a';
+				}
+				
+			break;	
+			case 'x':
+				grid[cent_x][cent_y]='a';
+				for(int k=1;k<oper_size+1;k++){
+					grid[cent_x-k][cent_y-k]='a';
+					grid[cent_x+k][cent_y-k]='a';
+					grid[cent_x-k][cent_y+k]='a';
+					grid[cent_x+k][cent_y+k]='a';	
+				}			
+				
+			break;	
+			case '/':
+				grid[cent_x][cent_y]='a';
+				for(int k=1;k<oper_size+1;k++){
+					grid[cent_x+k][cent_y-k]='a';
+					grid[cent_x-k][cent_y+k]='a';
+				}
+			break;
+		}
+}
+
+
+void OperatorGrid::place_oper(ArithmeticOperator * operator_x){
+	char symbol = operator_x->get_sign();
+	int oper_size = operator_x->get_size();
+	int cent_x = operator_x->get_x();
+	int cent_y = operator_x->get_y();
+	
+	switch(symbol){
+			case '+':											// Put symbol in grid[x][y]
+						grid[cent_x][cent_y]='+';
+				for(int k=1;k<oper_size+1;k++){
+						grid[cent_x][cent_y+k]='+';
+						grid[cent_x+k][cent_y]='+';
+						grid[cent_x-k][cent_y]='+';
+						grid[cent_x][cent_y-k]='+';
+					}
+			break;
+				
+			case '-':
+					grid[cent_x][cent_y]='-';
+				for(int k=1;k<oper_size+1;k++){
+					grid[cent_x][cent_y-k]='-';
+					grid[cent_x][cent_y+k]='-';
+				}
+				
+			break;	
+			case 'x':
+				grid[cent_x][cent_y]='x';
+				for(int k=1;k<oper_size+1;k++){
+					grid[cent_x-k][cent_y-k]='x';
+					grid[cent_x+k][cent_y-k]='x';
+					grid[cent_x-k][cent_y+k]='x';
+					grid[cent_x+k][cent_y+k]='x';	
+				}			
+				
+			break;	
+			case '/':
+				grid[cent_x][cent_y]='/';
+				for(int k=1;k<oper_size+1;k++){
+					grid[cent_x+k][cent_y-k]='/';
+					grid[cent_x-k][cent_y+k]='/';
+				}
+			break;
+	}
+}	
+
+
+
+int main(){
+
+
+    OperatorGrid a(10,7);
+    ArithmeticOperator *x = new ArithmeticOperator(2,2,1,'x');		//Creating Arithmetic Operators class
+    ArithmeticOperator *y = new ArithmeticOperator(2,4,1,'+');
+    ArithmeticOperator *z = new ArithmeticOperator(2,6,1,'x');
+    ArithmeticOperator *t = new ArithmeticOperator(2,1,9,'/');
+    ArithmeticOperator *w = new ArithmeticOperator(9,4,3,'-');
+    ArithmeticOperator *xx = new ArithmeticOperator(5,4,3,'/');
+    ArithmeticOperator *yy = new ArithmeticOperator(5,4,3,'-');
+    ArithmeticOperator *zz = new ArithmeticOperator(5,2,1,'-');
+    ArithmeticOperator *tt = new ArithmeticOperator(7,6,1,'/');
+    ArithmeticOperator *ww = new ArithmeticOperator(5,6,1,'+');
+    a.place_operator(x);
+    a.place_operator(y);											//Put it into grid
+    a.place_operator(z);
+    a.place_operator(t);
+    a.place_operator(w);
+    a.place_operator(xx);
+    a.place_operator(yy);
+    a.place_operator(zz);
+    a.place_operator(tt);
+    a.place_operator(ww);
+     a.move_operator(1,1,'D',2);									//Move it
+    a.move_operator(5,1,'D',5);
+    a.move_operator(1,1,'D',2);
+    a.move_operator(2,4,'L',1);
+    a.move_operator(2,4,'L',2);
+    a.move_operator(8,5,'L',3);
+    a.move_operator(1,7,'D',5);
+    a.move_operator(10,1,'R',7);
+    a.move_operator(5,4,'U',3);
+    a.print_operators();										//Print it
+	return 0;
+}
